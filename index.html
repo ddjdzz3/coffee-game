@@ -263,6 +263,115 @@
       }
     }
 
+    .card.card-breathing {
+      animation: cardBreathe 3s ease-in-out infinite;
+    }
+
+    @keyframes cardBreathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    /* 封面页 */
+    .cover-screen {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 40px;
+      border-radius: inherit;
+      background: transparent;
+      transition: opacity 0.5s ease-out;
+    }
+
+    .cover-screen.is-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .cover-divider {
+      width: 60px;
+      height: 1px;
+      background: #c67b5c;
+      margin: 0 auto 28px;
+    }
+
+    .cover-title {
+      font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      font-size: 36px;
+      font-weight: 700;
+      color: #1a1008;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+      text-shadow: 0 1px 3px rgba(255, 248, 240, 0.8);
+    }
+
+    .cover-subtitle {
+      font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      font-size: 17px;
+      font-weight: 500;
+      color: #6b5344;
+      letter-spacing: 1px;
+      line-height: 1.9;
+      margin-bottom: 44px;
+      max-width: 320px;
+    }
+
+    .cover-start-btn {
+      background: rgba(38, 30, 26, 0.88);
+      color: #fff8f0;
+      border: 1.5px solid rgba(198, 123, 92, 0.45);
+      border-radius: 12px;
+      padding: 16px 48px;
+      font-size: 17px;
+      font-weight: 600;
+      font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 200px;
+    }
+
+    .cover-start-btn:hover {
+      background: rgba(58, 44, 36, 0.94);
+      border-color: #c67b5c;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
+    }
+
+    .cover-start-btn:active {
+      transform: translateY(0) scale(0.98);
+      opacity: 0.92;
+    }
+
+    .cover-meta {
+      position: absolute;
+      top: 20px;
+      right: 40px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b5344;
+      letter-spacing: 1px;
+      user-select: none;
+    }
+
+    .card:not(.game-started) .mute-btn,
+    .card:not(.game-started) .clock,
+    .card:not(.game-started) .scene-content {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card.card-breathing {
+        animation: none;
+      }
+    }
+
     /* 幕间切换 */
     .scene-content {
       transition: none;
@@ -556,6 +665,31 @@
       .choice-btn {
         padding: 14px 20px;
       }
+
+      .cover-screen {
+        padding: 32px 24px;
+      }
+
+      .cover-meta {
+        top: 14px;
+        right: 24px;
+      }
+
+      .cover-title {
+        font-size: 30px;
+        letter-spacing: 1px;
+      }
+
+      .cover-subtitle {
+        font-size: 16px;
+        margin-bottom: 36px;
+      }
+
+      .cover-start-btn {
+        padding: 14px 40px;
+        font-size: 16px;
+        min-width: 180px;
+      }
     }
   </style>
 </head>
@@ -577,6 +711,13 @@
   <audio id="bgm" loop preload="auto" src="assets/bgm.mp3"></audio>
   <div class="game-container" id="gameContainer">
     <div class="card card-enter" id="card">
+      <div class="cover-screen" id="coverScreen">
+        <span class="cover-meta">🕐 21:00</span>
+        <div class="cover-divider"></div>
+        <h1 class="cover-title">打烊后</h1>
+        <p class="cover-subtitle">一个关于咖啡与雨夜的故事</p>
+        <button class="cover-start-btn" id="startBtn" type="button">开始 ▶</button>
+      </div>
       <button class="mute-btn" id="muteBtn" type="button" aria-label="静音" aria-pressed="false" title="静音">
         <span class="mute-icon" aria-hidden="true">♪</span>
       </button>
@@ -617,10 +758,13 @@
     const endingArtEl = document.getElementById("endingArt");
     const bgmEl = document.getElementById("bgm");
     const muteBtn = document.getElementById("muteBtn");
+    const coverScreenEl = document.getElementById("coverScreen");
+    const startBtn = document.getElementById("startBtn");
 
     const BGM_VOLUME = 0.22;
     const MUTE_KEY = "coffee-game-muted";
     let bgmStarted = false;
+    let gameStarted = false;
     let isMuted = localStorage.getItem(MUTE_KEY) === "true";
 
     let audioCtx = null;
@@ -654,15 +798,6 @@
     }
 
     function initAudio() {
-      if (isMuted) {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === "suspended") {
-          audioCtx.resume();
-        }
-        return audioCtx;
-      }
       startBgm();
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1034,26 +1169,50 @@
       displayScene(firstAct, firstAct.choices);
     }
 
-    gameContainerEl.addEventListener("click", (e) => {
-      if (e.target.closest(".mute-btn")) return;
+    function beginGame() {
+      if (gameStarted) return;
+      gameStarted = true;
+
       initAudio();
+      applyMuteState();
+
+      coverScreenEl.classList.add("is-hidden");
+      cardEl.classList.remove("card-breathing");
+      cardEl.classList.add("game-started");
+
+      setTimeout(() => {
+        coverScreenEl.style.display = "none";
+        startGame();
+      }, 500);
+    }
+
+    cardEl.addEventListener("animationend", (e) => {
+      if (e.animationName === "cardEnter") {
+        cardEl.classList.remove("card-enter");
+        cardEl.classList.add("card-breathing");
+      }
+    });
+
+    startBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      beginGame();
+    });
+
+    gameContainerEl.addEventListener("click", (e) => {
+      if (!gameStarted) return;
+      if (e.target.closest(".mute-btn")) return;
       if (e.target.closest(".choice-btn")) return;
       skipTypewriter();
     });
 
     muteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (!gameStarted) return;
       toggleMute();
       if (!isMuted) startBgm();
     });
 
     applyMuteState();
-
-    document.addEventListener("click", () => {
-      initAudio();
-    }, { once: true });
-
-    startGame();
   </script>
 </body>
 </html>
