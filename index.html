@@ -161,47 +161,49 @@
       z-index: 1;
     }
 
-    /* 时间显示 — 卡片内右上角 */
-    .clock {
+    /* 卡片顶栏 — 时间 + 静音 */
+    .card-header {
       position: absolute;
       top: 20px;
       right: 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    .clock {
       font-size: 13px;
       font-weight: 600;
       color: #6b5344;
       letter-spacing: 1px;
-      z-index: 10;
       user-select: none;
       font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      white-space: nowrap;
     }
 
-    /* 静音按钮 — 卡片内左上角 */
+    /* 静音按钮 — 右上角，时间旁 */
     .mute-btn {
-      position: absolute;
-      top: 16px;
-      left: 36px;
-      width: 34px;
-      height: 34px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
       border: 1.5px solid rgba(198, 123, 92, 0.45);
       background: rgba(255, 248, 240, 0.45);
-      color: #8b7355;
-      font-size: 15px;
+      font-size: 14px;
       line-height: 1;
       cursor: pointer;
-      z-index: 10;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.3s ease;
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
+      padding: 0;
     }
 
     .mute-btn:hover {
       background: rgba(198, 123, 92, 0.12);
       border-color: #c67b5c;
-      color: #6b5344;
       transform: scale(1.06);
     }
 
@@ -212,24 +214,6 @@
     .mute-btn.is-muted {
       opacity: 0.72;
       border-color: rgba(198, 123, 92, 0.3);
-    }
-
-    .mute-btn.is-muted .mute-icon::after {
-      content: "";
-      position: absolute;
-      width: 18px;
-      height: 1.5px;
-      background: #8b7355;
-      transform: rotate(-45deg);
-      border-radius: 1px;
-    }
-
-    .mute-icon {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-style: normal;
     }
 
     /* 中央卡片 */
@@ -359,8 +343,7 @@
       user-select: none;
     }
 
-    .card:not(.game-started) .mute-btn,
-    .card:not(.game-started) .clock,
+    .card:not(.game-started) .card-header,
     .card:not(.game-started) .scene-content {
       visibility: hidden;
       pointer-events: none;
@@ -618,20 +601,17 @@
         padding-top: 28px;
       }
 
-      .clock {
+      .card-header {
         top: -28px;
         left: 50%;
         right: auto;
         transform: translateX(-50%);
-        text-align: center;
       }
 
       .mute-btn {
-        top: 14px;
-        left: 20px;
-        width: 32px;
-        height: 32px;
-        font-size: 14px;
+        width: 28px;
+        height: 28px;
+        font-size: 13px;
       }
 
       .card {
@@ -708,7 +688,6 @@
     <span class="particle"></span>
     <span class="particle"></span>
   </div>
-  <audio id="bgm" loop preload="auto" src="assets/bgm.mp3"></audio>
   <div class="game-container" id="gameContainer">
     <div class="card card-enter" id="card">
       <div class="cover-screen" id="coverScreen">
@@ -718,10 +697,10 @@
         <p class="cover-subtitle">一个关于咖啡与雨夜的故事</p>
         <button class="cover-start-btn" id="startBtn" type="button">开始 ▶</button>
       </div>
-      <button class="mute-btn" id="muteBtn" type="button" aria-label="静音" aria-pressed="false" title="静音">
-        <span class="mute-icon" aria-hidden="true">♪</span>
-      </button>
-      <div class="clock" id="clock">🕐 21:00</div>
+      <div class="card-header">
+        <div class="clock" id="clock">🕐 21:00</div>
+        <button class="mute-btn" id="muteBtn" type="button" aria-label="静音" aria-pressed="false" title="静音">🔊</button>
+      </div>
       <div class="scene-content" id="sceneContent">
         <h1 class="title" id="title">铃响</h1>
         <div class="ending-art-wrap" id="endingArtWrap">
@@ -756,22 +735,32 @@
     const gameContainerEl = document.getElementById("gameContainer");
     const endingArtWrapEl = document.getElementById("endingArtWrap");
     const endingArtEl = document.getElementById("endingArt");
-    const bgmEl = document.getElementById("bgm");
     const muteBtn = document.getElementById("muteBtn");
     const coverScreenEl = document.getElementById("coverScreen");
     const startBtn = document.getElementById("startBtn");
 
-    const BGM_VOLUME = 0.22;
+    const MASTER_VOLUME = 0.3;
     const MUTE_KEY = "coffee-game-muted";
-    let bgmStarted = false;
+    const MELODY_NOTES = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25];
+
     let gameStarted = false;
     let isMuted = localStorage.getItem(MUTE_KEY) === "true";
-
     let audioCtx = null;
+    let masterGain = null;
+    let ambientStarted = false;
+    let melodyTimerId = null;
+    let bassOsc = null;
+
+    function isAudioSupported() {
+      return !!(window.AudioContext || window.webkitAudioContext);
+    }
 
     function applyMuteState() {
-      if (bgmEl) bgmEl.muted = isMuted;
+      if (masterGain) {
+        masterGain.gain.setValueAtTime(isMuted ? 0 : MASTER_VOLUME, audioCtx.currentTime);
+      }
       muteBtn.classList.toggle("is-muted", isMuted);
+      muteBtn.textContent = isMuted ? "🔇" : "🔊";
       muteBtn.setAttribute("aria-pressed", String(isMuted));
       muteBtn.setAttribute("aria-label", isMuted ? "取消静音" : "静音");
       muteBtn.title = isMuted ? "取消静音" : "静音";
@@ -783,71 +772,117 @@
       applyMuteState();
     }
 
-    function startBgm() {
-      if (bgmStarted || !bgmEl) return;
-      bgmEl.volume = BGM_VOLUME;
-      bgmEl.muted = isMuted;
-      const playPromise = bgmEl.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          bgmStarted = true;
-        }).catch(() => {
-          bgmStarted = false;
-        });
+    function playMelodyNote() {
+      if (!audioCtx || !masterGain) return;
+
+      const now = audioCtx.currentTime;
+      const freq = MELODY_NOTES[Math.floor(Math.random() * MELODY_NOTES.length)];
+      const osc = audioCtx.createOscillator();
+      const noteGain = audioCtx.createGain();
+
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, now);
+      noteGain.gain.setValueAtTime(0, now);
+      noteGain.gain.linearRampToValueAtTime(0.08, now + 0.5);
+      noteGain.gain.setValueAtTime(0.08, now + 1.0);
+      noteGain.gain.linearRampToValueAtTime(0, now + 3.0);
+
+      osc.connect(noteGain);
+      noteGain.connect(masterGain);
+      osc.start(now);
+      osc.stop(now + 3.05);
+    }
+
+    function playAmbientMusic() {
+      if (!audioCtx || !masterGain || ambientStarted) return;
+
+      try {
+        ambientStarted = true;
+        const now = audioCtx.currentTime;
+
+        bassOsc = audioCtx.createOscillator();
+        const bassGain = audioCtx.createGain();
+        bassOsc.type = "sine";
+        bassOsc.frequency.setValueAtTime(130.81, now);
+        bassGain.gain.setValueAtTime(0.04, now);
+        bassOsc.connect(bassGain);
+        bassGain.connect(masterGain);
+        bassOsc.start(now);
+
+        playMelodyNote();
+        melodyTimerId = setInterval(playMelodyNote, 4000);
+      } catch (e) {
+        ambientStarted = false;
       }
     }
 
-    function initAudio() {
-      startBgm();
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    async function initAudio() {
+      if (!isAudioSupported()) return null;
+
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!audioCtx) {
+          audioCtx = new AudioContextClass();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.setValueAtTime(isMuted ? 0 : MASTER_VOLUME, audioCtx.currentTime);
+          masterGain.connect(audioCtx.destination);
+        }
+
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume();
+        }
+
+        playAmbientMusic();
+        return audioCtx;
+      } catch (e) {
+        return null;
       }
-      if (audioCtx.state === "suspended") {
-        audioCtx.resume();
-      }
-      return audioCtx;
     }
 
     function playDing() {
-      if (isMuted) return;
-      const ctx = initAudio();
-      const now = ctx.currentTime;
+      if (!gameStarted || isMuted || !audioCtx || !masterGain) return;
 
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(1600, now);
-      filter.Q.setValueAtTime(0.4, now);
+      try {
+        const now = audioCtx.currentTime;
 
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.028, now + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(1600, now);
+        filter.Q.setValueAtTime(0.4, now);
 
-      filter.connect(gain);
-      gain.connect(ctx.destination);
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.028, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
 
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(659.25, now);
-      osc.frequency.exponentialRampToValueAtTime(698.46, now + 0.1);
+        filter.connect(gain);
+        gain.connect(masterGain);
 
-      const harmonic = ctx.createOscillator();
-      harmonic.type = "sine";
-      harmonic.frequency.setValueAtTime(1318.5, now);
+        const osc = audioCtx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(659.25, now);
+        osc.frequency.exponentialRampToValueAtTime(698.46, now + 0.1);
 
-      const harmGain = ctx.createGain();
-      harmGain.gain.setValueAtTime(0, now);
-      harmGain.gain.linearRampToValueAtTime(0.06, now + 0.018);
-      harmGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        const harmonic = audioCtx.createOscillator();
+        harmonic.type = "sine";
+        harmonic.frequency.setValueAtTime(1318.5, now);
 
-      osc.connect(filter);
-      harmonic.connect(harmGain);
-      harmGain.connect(filter);
+        const harmGain = audioCtx.createGain();
+        harmGain.gain.setValueAtTime(0, now);
+        harmGain.gain.linearRampToValueAtTime(0.06, now + 0.018);
+        harmGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
 
-      osc.start(now);
-      harmonic.start(now);
-      osc.stop(now + 0.52);
-      harmonic.stop(now + 0.32);
+        osc.connect(filter);
+        harmonic.connect(harmGain);
+        harmGain.connect(filter);
+
+        osc.start(now);
+        harmonic.start(now);
+        osc.stop(now + 0.52);
+        harmonic.stop(now + 0.32);
+      } catch (e) {
+        /* 静默跳过 */
+      }
     }
 
     const acts = [
@@ -1173,8 +1208,9 @@
       if (gameStarted) return;
       gameStarted = true;
 
-      initAudio();
-      applyMuteState();
+      initAudio().then(() => {
+        applyMuteState();
+      });
 
       coverScreenEl.classList.add("is-hidden");
       cardEl.classList.remove("card-breathing");
@@ -1209,10 +1245,12 @@
       e.stopPropagation();
       if (!gameStarted) return;
       toggleMute();
-      if (!isMuted) startBgm();
     });
 
-    applyMuteState();
+    if (isMuted) {
+      muteBtn.textContent = "🔇";
+      muteBtn.classList.add("is-muted");
+    }
   </script>
 </body>
 </html>
