@@ -484,6 +484,16 @@
       display: block;
     }
 
+    .card.ending-mode {
+      overflow: visible;
+    }
+
+    .card.ending-mode .scene-content {
+      opacity: 1 !important;
+      transform: none !important;
+      visibility: visible !important;
+    }
+
     /* 结局文字 */
     .card.ending-mode .story-text {
       font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
@@ -620,6 +630,14 @@
         overflow: visible;
       }
 
+      .card.ending-mode {
+        overflow: visible;
+      }
+
+      .scene-content {
+        overflow: visible;
+      }
+
       .title {
         font-size: 28px;
         font-weight: 700;
@@ -705,7 +723,7 @@
       <div class="scene-content" id="sceneContent">
         <h1 class="title" id="title">铃响</h1>
         <div class="ending-art-wrap" id="endingArtWrap">
-          <img class="ending-art" id="endingArt" alt="" />
+          <img class="ending-art" id="endingArt" alt="" loading="eager" decoding="async" />
         </div>
         <div class="ending-divider" id="endingDivider"></div>
         <p class="story-text" id="story"></p>
@@ -896,17 +914,17 @@
     const endings = {
       a: {
         title: "明天见",
-        image: "./assets/ending-a.png",
+        image: "assets/ending-a.png",
         text: "便签上的字慢慢清晰：\n\"谢谢你。这家店我来了17天，今天是第一次有人问我咖啡苦不苦。\n明天见。\"\n雨停了。你看着窗外，路灯下有个影子在挥手。"
       },
       b: {
         title: "不必追",
-        image: "./assets/ending-b.png",
+        image: "assets/ending-b.png",
         text: "便签上的字被水渍晕开，但你还是认出来了：\n\"其实我今天辞职了。这杯是告别。不必追，我已经好了。\n祝你今晚不加班。\"\n你站在门口，雨还在下。但他的伞已经走远了。"
       },
       c: {
         title: "今天不加班了",
-        image: "./assets/ending-c.png",
+        image: "assets/ending-c.png",
         text: "便签上只有一行字：\n\"今天不加班了。替我把这杯喝完吧。\"\n你端起那杯冷掉的拿铁，喝了一口。确实很苦。"
       }
     };
@@ -1026,42 +1044,57 @@
       endingArtEl.alt = "";
     }
 
+    function forceSceneVisible() {
+      sceneContentEl.classList.remove("scene-exit", "scene-enter", "scene-enter-active");
+      sceneContentEl.style.opacity = "1";
+      sceneContentEl.style.transform = "none";
+    }
+
+    function clearSceneInlineStyles() {
+      sceneContentEl.style.opacity = "";
+      sceneContentEl.style.transform = "";
+    }
+
     function showEndingArt(ending, onReady) {
       const TEXT_DELAY = 300;
       const ANIM_DURATION = 800;
+      const LOAD_TIMEOUT = 2500;
+      let finished = false;
+
+      function finish(onImageFailed) {
+        if (finished) return;
+        finished = true;
+        clearTimeout(loadTimer);
+
+        if (onImageFailed) {
+          endingArtWrapEl.classList.remove("is-active");
+          endingArtEl.classList.remove("is-visible");
+        } else {
+          endingArtEl.classList.add("is-visible");
+        }
+
+        const animDuration = onImageFailed || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 0
+          : ANIM_DURATION;
+        setTimeout(onReady, animDuration + TEXT_DELAY);
+      }
 
       endingArtWrapEl.classList.add("is-active");
       endingArtEl.classList.remove("is-visible");
       endingArtEl.alt = ending.title;
 
-      function startTextDelay() {
-        setTimeout(onReady, TEXT_DELAY);
-      }
-
-      function onImageReady() {
-        requestAnimationFrame(() => {
-          endingArtEl.classList.add("is-visible");
-          const animDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ANIM_DURATION;
-          setTimeout(onReady, animDuration + TEXT_DELAY);
-        });
-      }
-
-      function onImageError() {
-        endingArtWrapEl.classList.remove("is-active");
-        endingArtEl.classList.remove("is-visible");
-        startTextDelay();
-      }
+      const loadTimer = setTimeout(() => finish(true), LOAD_TIMEOUT);
 
       endingArtEl.onload = () => {
         endingArtEl.onload = null;
         endingArtEl.onerror = null;
-        onImageReady();
+        finish(false);
       };
 
       endingArtEl.onerror = () => {
         endingArtEl.onload = null;
         endingArtEl.onerror = null;
-        onImageError();
+        finish(true);
       };
 
       endingArtEl.src = ending.image;
@@ -1069,7 +1102,7 @@
       if (endingArtEl.complete && endingArtEl.naturalWidth > 0) {
         endingArtEl.onload = null;
         endingArtEl.onerror = null;
-        onImageReady();
+        finish(false);
       }
     }
 
@@ -1079,8 +1112,14 @@
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           sceneContentEl.classList.add("scene-enter-active");
+          const safetyTimer = setTimeout(() => {
+            sceneContentEl.classList.remove("scene-enter", "scene-enter-active");
+            clearSceneInlineStyles();
+          }, 800);
+
           sceneContentEl.addEventListener("transitionend", function onEnd(e) {
             if (e.propertyName !== "opacity") return;
+            clearTimeout(safetyTimer);
             sceneContentEl.classList.remove("scene-enter", "scene-enter-active");
             sceneContentEl.removeEventListener("transitionend", onEnd);
           });
@@ -1090,6 +1129,7 @@
 
     function displayScene(scene, choices) {
       exitEndingMode();
+      clearSceneInlineStyles();
       titleEl.textContent = scene.title;
       pendingChoices = choices || null;
       pendingIsRestart = false;
@@ -1099,12 +1139,16 @@
       });
     }
 
-    function fadeTransition(callback) {
+    function fadeTransition(callback, skipEnterAnim) {
       sceneContentEl.classList.remove("scene-enter", "scene-enter-active");
       sceneContentEl.classList.add("scene-exit");
       setTimeout(() => {
         callback();
-        playSceneEnter();
+        if (skipEnterAnim) {
+          forceSceneVisible();
+        } else {
+          playSceneEnter();
+        }
       }, 400);
     }
 
@@ -1121,6 +1165,7 @@
     function showEnding() {
       const ending = getEnding();
       enterEndingMode();
+      forceSceneVisible();
       titleEl.textContent = ending.title;
       hideChoices();
       storyEl.textContent = "";
@@ -1143,10 +1188,12 @@
       advanceTime();
       act++;
 
+      const isEnding = choice.next === "ending";
+
       fadeTransition(() => {
         clearTypewriter();
 
-        if (choice.next === "ending") {
+        if (isEnding) {
           showEnding();
           return;
         }
@@ -1155,7 +1202,7 @@
         if (scene) {
           displayScene(scene, scene.choices);
         }
-      });
+      }, isEnding);
     }
 
     function startGame() {
